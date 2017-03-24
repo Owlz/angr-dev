@@ -110,6 +110,7 @@ then
 else
 	OUTFILE=/tmp/pip-$$
 	ERRFILE=/tmp/pip-$$
+	touch $OUTFILE
 fi
 
 function info
@@ -130,8 +131,12 @@ function debug
 function error
 {
 	echo "$(tput setaf 1 2>/dev/null)[!!] $@$(tput sgr0 2>/dev/null)" >&2
+	cat $OUTFILE
+	cat $ERRFILE
 	exit 1
 }
+
+trap 'error "An error occurred on line $LINENO. Saved output:"' ERR
 
 if [ "$INSTALL_REQS" -eq 1 ]
 then
@@ -140,11 +145,11 @@ then
 	then
 		if ! (dpkg --print-foreign-architectures | grep i386)
 		then
-			echo "Adding i386 architectures..."
+			info "Adding i386 architectures..."
 			sudo dpkg --add-architecture i386
-			sudo apt-get update
+			sudo apt-get update >> $OUTFILE 2>> $ERRFILE
 		fi
-		sudo apt-get install -y $DEBS
+		sudo apt-get install -y $DEBS >> $OUTFILE 2>> $ERRFILE
 	else
 		error "We don't know which dependencies to install for this sytem.\nPlease install the equivalents of these debian packages: $DEBS."
 	fi
@@ -180,9 +185,11 @@ then
 		info "Virtualenv $ANGR_VENV already exists, reusing it. Use -E instead of -e if you want to re-create the environment."
 	elif [ "$USE_PYPY" -eq 1 ]
 	then
-		./pypy_venv.sh $ANGR_VENV
+		info "Creating pypy virtualenv $ANGR_VENV."
+		./pypy_venv.sh $ANGR_VENV >> $OUTFILE 2>> $ERRFILE
 	else
-		mkvirtualenv --python=$(which python2) $ANGR_VENV
+		info "Creating cpython virtualenv $ANGR_VENV."
+		mkvirtualenv --python=$(which python2) $ANGR_VENV >> $OUTFILE 2>> $ERRFILE
 	fi
 
 	set -e
@@ -269,7 +276,7 @@ done
 if [ -n "$BRANCH" ]
 then
 	info "Checking out branch $BRANCH."
-	./git_all.sh checkout $BRANCH
+	./git_all.sh checkout $BRANCH >> $OUTFILE 2>> $ERRFILE
 fi
 
 if [ $INSTALL -eq 1 ]
@@ -313,7 +320,6 @@ then
             info "Installed $PACKAGE."
         else
             error "$PACKAGE failed to install. Check $OUTFILE for details, or read it here:"
-            cat $OUTFILE
             exit 1
         fi
     done
@@ -327,7 +333,6 @@ then
 		[ $VERBOSE -eq 1 ] || rm -f $OUTFILE
 	else
 		error "Something failed to install. Check $OUTFILE for details, or read it here:"
-		cat $OUTFILE
 		exit 1
 	fi
 fi
